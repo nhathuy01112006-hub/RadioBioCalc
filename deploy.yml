@@ -1,0 +1,54 @@
+name: Publish RadioBioCalc + poster QR
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download repository
+        uses: actions/checkout@v4
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install poster dependencies
+        run: python -m pip install --disable-pip-version-check -r requirements-poster.txt
+      - name: Verify the calculation modules
+        run: node tests/calculation-smoke.cjs
+      - name: Render poster and both real QR codes
+        shell: bash
+        run: |
+          owner="${GITHUB_REPOSITORY%%/*}"
+          repo="${GITHUB_REPOSITORY#*/}"
+          if [[ "${repo,,}" == "${owner,,}.github.io" ]]; then
+            url="https://${owner}.github.io/"
+          else
+            url="https://${owner}.github.io/${repo}/"
+          fi
+          echo "Site base URL: $url"
+          python tools/finalize_poster.py --site-url "$url"
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+      - name: Package site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
